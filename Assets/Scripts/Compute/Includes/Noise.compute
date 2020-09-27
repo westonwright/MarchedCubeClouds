@@ -1,0 +1,75 @@
+// Noise Shader Library for Unity - https://github.com/keijiro/NoiseShader
+//
+// Original work (webgl-noise) Copyright (C) 2011 Ashima Arts.
+// Translation and modification was made by Keijiro Takahashi.
+//
+// This shader is based on the webgl-noise GLSL shader. For further details
+// of the original shader, please see the following description from the
+// original source code.
+//
+
+//
+// Description : Array and textureless GLSL 2D/3D/4D simplex
+//               noise functions.
+//      Author : Ian McEwan, Ashima Arts.
+//  Maintainer : ijm
+//     Lastmod : 20110822 (ijm)
+//     License : Copyright (C) 2011 Ashima Arts. All rights reserved.
+//               Distributed under the MIT License. See LICENSE file.
+//               https://github.com/ashima/webgl-noise
+//
+
+StructuredBuffer<int> perm;
+
+float Grad(int hash, float x, float y, float z)
+{
+    int h = hash & 15;
+    float u = h < 8 ? x : y;
+    float v = h < 4 ? y : (h == 12 || h == 14 ? x : z);
+    return ((h & 1) == 0 ? u : -u) + ((h & 2) == 0 ? v : -v);
+}
+
+float Lerp(float t, float a, float b)
+{
+    return a + t * (b - a);
+}
+
+float Fade(float t)
+{
+    return t * t * t * (t * (t * 6 - 15) + 10);
+}
+
+float Noise(float x, float y, float z)
+{
+    int X = int(floor(x)) & 0xff;
+    int Y = int(floor(y)) & 0xff;
+    int Z = int(floor(z)) & 0xff;
+    x -= floor(x);
+    y -= floor(y);
+    z -= floor(z);
+    float u = Fade(x);
+    float v = Fade(y);
+    float w = Fade(z);
+    int A = (perm[X] + Y) & 0xff;
+    int B = (perm[X + 1] + Y) & 0xff;
+    int AA = (perm[A] + Z) & 0xff;
+    int BA = (perm[B] + Z) & 0xff;
+    int AB = (perm[A + 1] + Z) & 0xff;
+    int BB = (perm[B + 1] + Z) & 0xff;
+    return Lerp(w, Lerp(v, Lerp(u, Grad(perm[AA], x, y, z), Grad(perm[BA], x - 1, y, z)),
+        Lerp(u, Grad(perm[AB], x, y - 1, z), Grad(perm[BB], x - 1, y - 1, z))),
+        Lerp(v, Lerp(u, Grad(perm[AA + 1], x, y, z - 1), Grad(perm[BA + 1], x - 1, y, z - 1)),
+            Lerp(u, Grad(perm[AB + 1], x, y - 1, z - 1), Grad(perm[BB + 1], x - 1, y - 1, z - 1))));
+}
+
+float Fbm(float3 coord, int octave)
+{
+    float f = 0.0f;
+    float w = 0.5f;
+    for (int i = 0; i < octave; i++) {
+        f += w * Noise(coord.x, coord.y, coord.z);
+        coord *= 2.0f;
+        w *= 0.5f;
+    }
+    return f;
+}

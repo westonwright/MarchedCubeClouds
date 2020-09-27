@@ -1,0 +1,141 @@
+#pragma kernel March
+#include "/Includes/TriangulationTable.compute"
+
+static const int numThreads = 8;
+
+struct Triangle 
+{
+    float3 vertex2;
+    float3 vertex1;
+    float3 vertex0;
+    float3 normal2;
+    float3 normal1;
+    float3 normal0;
+};
+struct CubeVert 
+{
+    float4 vert;
+    float3 normal;
+};
+
+AppendStructuredBuffer<Triangle> triangles;
+RWStructuredBuffer<float4> points;
+
+int pointsPerAxis;
+float surfaceLevel;
+
+float3 interpolateVerts(float4 v1, float4 v2) 
+{
+    float t = (surfaceLevel - v1.w) / (v2.w - v1.w);
+    return v1.xyz + t * (v2.xyz - v1.xyz);
+}
+
+int pointIndex(int x, int y, int z) 
+{
+    return (pointsPerAxis * pointsPerAxis * y) + (pointsPerAxis * z) + x;
+}
+
+float3 baseNormals(int x, int y, int z) 
+{
+    float normX = (points[pointIndex(x + 1, y, z)].w - points[pointIndex(x - 1, y, z)].w) / 2;
+    float normY = (points[pointIndex(x, y + 1, z)].w - points[pointIndex(x, y - 1, z)].w) / 2;
+    float normZ = (points[pointIndex(x, y, z + 1)].w - points[pointIndex(x, y, z - 1)].w) / 2;
+    return normalize(float3(-normX, -normY, -normZ));
+}
+
+float3 slerp(float3 start, float3 end, float percent)
+{
+    // Dot product - the cosine of the angle between 2 vectors.
+    float dotP = dot(start, end);
+    // Clamp it to be in the range of Acos()
+    // This may be unnecessary, but floating point
+    // precision can be a fickle mistress.
+    dotP = clamp(dotP, -1.0f, 1.0f);
+    // Acos(dot) returns the angle between start and end,
+    // And multiplying that by percent returns the angle between
+    // start and the final result.
+    float theta = acos(dotP) * percent;
+    float3 RelativeVec = normalize(end - start * dotP);
+    // Orthonormal basis
+    // The final result.
+    return ((start * cos(theta)) + (RelativeVec * sin(theta)));
+}
+
+float3 interpolateNorms(CubeVert cubeA, CubeVert cubeB) 
+{
+    float t = (surfaceLevel - cubeA.vert.w) / (cubeB.vert.w - cubeA.vert.w);
+
+    return slerp(cubeA.normal, cubeB.normal, t);
+}
+
+
+
+[numthreads(numThreads, numThreads, numThreads)]
+void March(int3 id : SV_DispatchThreadID)
+{
+    // Stop two before the end because voxel includes neighbouring points
+    // and there is an extra voxel for normal calculation
+    if ((id.x >= pointsPerAxis - 2 || id.y >= pointsPerAxis - 2 || id.z >= pointsPerAxis - 2) || (id.x < 1 || id.y < 1 || id.z < 1))
+    {
+        return;
+    }
+
+    // 8 corners of the current cube
+    CubeVert cubeVerts[8];
+    cubeVerts[0].vert = points[pointIndex(id.x, id.y, id.z)];
+    cubeVerts[1].vert = points[pointIndex(id.x + 1, id.y, id.z)];
+    cubeVerts[2].vert = points[pointIndex(id.x + 1, id.y, id.z + 1)];
+    cubeVerts[3].vert = points[pointIndex(id.x, id.y, id.z + 1)];
+    cubeVerts[4].vert = points[pointIndex(id.x, id.y + 1, id.z)];
+    cubeVerts[5].vert = points[pointIndex(id.x + 1, id.y + 1, id.z)];
+    cubeVerts[6].vert = points[pointIndex(id.x + 1, id.y + 1, id.z + 1)];
+    cubeVerts[7].vert = points[pointIndex(id.x, id.y + 1, id.z + 1)];
+    cubeVerts[0].normal = baseNormals(id.x, id.y, id.z);
+    cubeVerts[1].normal = baseNormals(id.x + 1, id.y, id.z);
+    cubeVerts[2].normal = baseNormals(id.x + 1, id.y, id.z + 1);
+    cubeVerts[3].normal = baseNormals(id.x, id.y, id.z + 1);
+    cubeVerts[4].normal = baseNormals(id.x, id.y + 1, id.z);
+    cubeVerts[5].normal = baseNormals(id.x + 1, id.y + 1, id.z);
+    cubeVerts[6].normal = baseNormals(id.x + 1, id.y + 1, id.z + 1);
+    cubeVerts[7].normal = baseNormals(id.x, id.y + 1, id.z + 1);
+
+
+    // Calculate unique index for each cube configuration.
+    // There are 256 possible values
+    // A value of 0 means cube is entirely inside surface; 255 entirely outside.
+    // The value is used to look up the edge table, which indicates which edges of the cube are cut by the isosurface.
+    int cubeIndex = 0;
+    if (cubeVerts[0].vert.w < surfaceLevel) cubeIndex |= 1;
+    if (cubeVerts[1].vert.w < surfaceLevel) cubeIndex |= 2;
+    if (cubeVerts[2].vert.w < surfaceLevel) cubeIndex |= 4;
+    if (cubeVerts[3].vert.w < surfaceLevel) cubeIndex |= 8;
+    if (cubeVerts[4].vert.w < surfaceLevel) cubeIndex |= 16;
+    if (cubeVerts[5].vert.w < surfaceLevel) cubeIndex |= 32;
+    if (cubeVerts[6].vert.w < surfaceLevel) cubeIndex |= 64;
+    if (cubeVerts[7].vert.w < surfaceLevel) cubeIndex |= 128;
+
+    // Create triangles for current cube configuration
+    for (int i = 0; triangulation[cubeIndex][i] != -1; i += 3) {
+        // Get indices of corner points A and B for each of the three edges
+        // of the cube that need to be joined to form the triangle.
+        int indexA0 = cornerIndexAFromEdge[triangulation[cubeIndex][i]];
+        int indexB0 = cornerIndexBFromEdge[triangulation[cubeIndex][i]];
+
+        int indexA1 = cornerIndexAFromEdge[triangulation[cubeIndex][i + 1]];
+        int indexB1 = cornerIndexBFromEdge[triangulation[cubeIndex][i + 1]];
+
+        int indexA2 = cornerIndexAFromEdge[triangulation[cubeIndex][i + 2]];
+        int indexB2 = cornerIndexBFromEdge[triangulation[cubeIndex][i + 2]];
+
+        Triangle tri;
+        tri.vertex0 = interpolateVerts(cubeVerts[indexA0].vert, cubeVerts[indexB0].vert);
+        tri.vertex1 = interpolateVerts(cubeVerts[indexA1].vert, cubeVerts[indexB1].vert);
+        tri.vertex2 = interpolateVerts(cubeVerts[indexA2].vert, cubeVerts[indexB2].vert);
+
+        tri.normal0 = interpolateNorms(cubeVerts[indexA0], cubeVerts[indexB0]);
+        tri.normal1 = interpolateNorms(cubeVerts[indexA1], cubeVerts[indexB1]);
+        tri.normal2 = interpolateNorms(cubeVerts[indexA2], cubeVerts[indexB2]);
+        
+        triangles.Append(tri);
+    }
+}

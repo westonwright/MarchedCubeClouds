@@ -1,0 +1,76 @@
+#pragma kernel Density
+#include "/Includes/Noise.compute"
+
+static const int numThreads = 8;
+
+// Noise settings
+int numPointsPerAxis;
+float chunkSize;
+float3 chunkSection;
+
+int octaves;
+float noiseScale;
+float cloudsGradFloor;
+float cloudsGradCeil;
+float cutoffGradFloor;
+float cutoffGradCeil;
+
+float timePassed;
+
+RWStructuredBuffer<float4> pointValues;
+
+float CalcNoise(float3 noisePos, float scale, int oct) 
+{
+    return Fbm(noisePos * scale, oct);
+}
+
+float Remap(float in1, float in2, float out1, float out2, float inputVal)
+{
+    float inRange = in2 - in1;
+    float normalizedValue = (inputVal - in1) / inRange;
+    float outRange = out2 - out1;
+    return out1 + (normalizedValue * outRange);
+}
+
+float Gradient(float3 pointPosition, float gradFloor, float gradCeil, float min, float max)
+{
+    return clamp(lerp(min, max, Remap(gradFloor, gradCeil, 0, 1, pointPosition.y)), min, max);
+}
+
+float PositionFromLevel(int axisLevel, float axisPos) 
+{
+    return ((axisLevel - 1) * (chunkSize / (numPointsPerAxis - 3))) + (axisPos - (.5f * chunkSize));
+}
+
+[numthreads(numThreads, numThreads, numThreads)]
+void Density(int3 id : SV_DispatchThreadID)
+{
+    if (id.x >= numPointsPerAxis || id.y >= numPointsPerAxis || id.z >= numPointsPerAxis) 
+    {
+        return;
+    }
+
+    float xPos = PositionFromLevel(id.x, chunkSection.x);
+    float yPos = PositionFromLevel(id.y, chunkSection.y);
+    float zPos = PositionFromLevel(id.z, chunkSection.z);
+    float3 currentPosition = float3(xPos, yPos, zPos);
+    //float3 noisePosition = float3(xPos, yPos, zPos);
+    float3 noisePosition = float3(xPos + timePassed * 15, yPos + timePassed * 3, zPos + timePassed * 5);
+
+    int pointIndex = (numPointsPerAxis * numPointsPerAxis * id.y) + (numPointsPerAxis * id.z) + id.x;
+
+    //chunk.points[pointIndex].position = new Vector3((x * (chunk.size / chunk.pointsPerAxis)), (y * (chunk.size / chunk.pointsPerAxis)), (z * (chunk.size / chunk.pointsPerAxis)));
+    //float pointDisplacement = Noise(currentPosition, noiseScale, octaves) + Noise(currentPosition, noiseScale * 2, octaves);
+    //float pointDisplacement = 1;
+    float pointDisplacement = CalcNoise(noisePosition, noiseScale, octaves);
+    //pointDisplacement /= 2;
+    //pointDisplacement = abs(Remap(0, 1, -1, 1, pointDisplacement));
+    //pointDisplacement = abs(pointDisplacement);
+
+    //pointDisplacement = ((Gradient(currentPosition, cloudsGradFloor, cloudsGradCeil, 0, 1)) * calcNoise(noisePosition, noiseScale / 4, 1));
+    //pointDisplacement *= ((Gradient(currentPosition, cloudsGradFloor, cloudsGradCeil, 0, 1)) * calcNoise(noisePosition, noiseScale / 4, 1));
+    //pointDisplacement += (Gradient(currentPosition, cutoffGradFloor, cutoffGradCeil, 0, 1));
+    //pointDisplacement = clamp(pointDisplacement, -1, 1);
+
+    pointValues[pointIndex] = float4(xPos, yPos, zPos, pointDisplacement);
+}
