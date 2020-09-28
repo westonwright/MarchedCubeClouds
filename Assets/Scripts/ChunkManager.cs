@@ -14,144 +14,72 @@ public class ChunkManager : MonoBehaviour
 
     public GameObject chunkPrefab;
 
-    private List<Chunk> chunks = new List<Chunk>();
+    private List<Vector3> currentSections = new List<Vector3>();
+    private Vector3Int playerChunkPosition;
+
     public GameObject player;
     private Vector3 playerPosition;
 
-    private MeshGenerator meshGenerator;
-    private DensityGenerator densityGenerator;
-
     private void Start()
     {
-        densityGenerator = FindObjectOfType<DensityGenerator>();
-        meshGenerator = FindObjectOfType<MeshGenerator>();
     }
 
     private void Update()
     {
         playerPosition = player.transform.position;
-        Vector3Int playerChunkPosition = new Vector3Int(Mathf.FloorToInt((playerPosition.x / chunkSize)), Mathf.FloorToInt((playerPosition.y / chunkSize)), Mathf.FloorToInt((int)(playerPosition.z / chunkSize))) * chunkSize;
-        List<Vector3> newSections = new List<Vector3>();
-        for (float z = -renderDistance + playerChunkPosition.z; z < renderDistance; z += (float)chunkSize)
+        playerChunkPosition = new Vector3Int(Mathf.FloorToInt((playerPosition.x / chunkSize)), Mathf.FloorToInt((playerPosition.y / chunkSize)), Mathf.FloorToInt((int)(playerPosition.z / chunkSize))) * chunkSize;
+        for (float z = -renderDistance + playerChunkPosition.z; z < renderDistance; z += chunkSize)
         {
-            for (float y = -renderDistance + playerChunkPosition.y; y < renderDistance; y += (float)chunkSize)
+            for (float y = -renderDistance + playerChunkPosition.y; y < renderDistance; y += chunkSize)
             {
-                for (float x = -renderDistance + playerChunkPosition.x; x < renderDistance; x += (float)chunkSize)
+                for (float x = -renderDistance + playerChunkPosition.x; x < renderDistance; x += chunkSize)
                 {
                     if(y > chunkFloor && y < chunkCeil)
                     {
                         Vector3 sectionPosition = new Vector3(x, y, z);
                         if (Vector3.Distance(sectionPosition, playerPosition) < renderDistance)
                         {
-                            newSections.Add(sectionPosition);
+                            if(currentSections.IndexOf(sectionPosition) < 0)
+                            {
+                                currentSections.Add(sectionPosition);
+                                CreateChunk(sectionPosition);
+                            }
                         }
                     }
                 }
             }
         }
-
-        List<Chunk> chunksToDelete = new List<Chunk>();
-        foreach(Chunk chunk in chunks)
-        {
-            if(newSections.IndexOf(chunk.section) < 0)
-            {
-                chunksToDelete.Add(chunk);
-                continue;
-            }
-        }
-        DeleteChunks(chunksToDelete.ToArray());
-
-        List<Vector3> sectionsToAdd = new List<Vector3>();
-        foreach(Vector3 section in newSections)
-        {
-            if(!chunks.Exists(x => x.section == section))
-            {
-                sectionsToAdd.Add(section);
-            }
-        }
-        CreateChunks(sectionsToAdd.ToArray());
-
-        CheckChunks();
-
-        RefreshChunks();
     }
 
-    private void DeleteChunks(Chunk[] deleteChunks)
+    private void CreateChunk(Vector3 section)
     {
-        foreach(Chunk chunk in deleteChunks)
-        {
-            Destroy(chunk.chunkObject);
-            chunks.Remove(chunk);
-        }
+        ChunkData newChunkData = new ChunkData();
+        newChunkData.chunkObject = Instantiate(chunkPrefab, transform);
+        newChunkData.section = section;
+        newChunkData.size = chunkSize;
+
+        Chunk newChunk = newChunkData.chunkObject.GetComponent<Chunk>();
+        newChunk.chunkData = newChunkData;
+        newChunk.chunkManager = this;
+        newChunk.player = player.transform;
+        newChunk.renderDistance = renderDistance;
+        newChunk.falloffLevels = falloffLevels;
+        newChunk.basePointsPerAxis = pointsPerAxis;
+
     }
 
-    private void CreateChunks(Vector3[] addSections)
+    public void DeleteChunk(ChunkData deleteChunk)
     {
-        foreach(Vector3 section in addSections)
-        {
-            Chunk newChunk = new Chunk();
-            newChunk.chunkObject = Instantiate(chunkPrefab, transform);
-            //newChunk.chunkObject.transform.position = section;
-            newChunk.section = section;
-            //newChunk.size = chunkSize;
-            chunks.Add(newChunk);
-        }
-    }
-
-    private void CheckChunks()
-    {
-        foreach(Chunk chunk in chunks)
-        {
-            float chunkDistance = Vector3.Distance(chunk.section, playerPosition);
-            int currentQualityDivider = Mathf.CeilToInt(chunkDistance / (renderDistance / falloffLevels));
-            currentQualityDivider = currentQualityDivider == 0 ? 1 : currentQualityDivider;
-            if (chunk.qualityDivider != currentQualityDivider)
-            {
-                UpdateChunk(chunk, currentQualityDivider);
-            }
-        }
-    }
-
-    private void UpdateChunk(Chunk chunk, int qualityDivider)
-    {
-        chunk.qualityDivider = qualityDivider;
-        int basePoints = Mathf.FloorToInt(pointsPerAxis / qualityDivider);
-        chunk.pointsPerAxis = basePoints + 2;
-        chunk.baseSize = chunkSize;
-        //chunk.size = chunkSize * ((.5f + (1f / basePoints)) / .5f);
-        chunk.size = chunkSize;
-        chunk.points = new Vector4[chunk.pointsPerAxis * chunk.pointsPerAxis * chunk.pointsPerAxis];
-    }
-
-    private void RefreshChunks()
-    {
-        foreach(Chunk chunk in chunks)
-        {
-            densityGenerator.CalculatePoints(chunk);
-            //meshGenerator.DrawChunk(chunk);
-        }
-    }
-
-    void OnDrawGizmos()
-    {
-        Gizmos.color = Color.white;
-        foreach (var chunk in chunks)
-        {
-            //Gizmos.color = new Color(1, 1, 1, .5f);
-            //Gizmos.DrawWireCube(chunk.section, Vector3.one * (chunk.size / 2));
-            //Gizmos.DrawWireCube(chunk.section, Vector3.one * (chunk.size));
-        }
+        currentSections.Remove(deleteChunk.section);
+        Destroy(deleteChunk.chunkObject);
     }
 }
 
-public class Chunk
+public class ChunkData
 {
     //render quality counts up as it goes down in quality. Equals 0 if chunk isn't rendering.
-    public int qualityDivider = 0;
     public int pointsPerAxis;
-    public float size;
-    public float baseSize;
-    public Vector4[] points;
+    public int size;
     public GameObject chunkObject;
     public Vector3 section;
 }

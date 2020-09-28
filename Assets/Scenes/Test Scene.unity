@@ -362,10 +362,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: fe55476da1bb9bd4e873e43183022471, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  pointsPerAxis: 60
-  renderDistance: 4000
-  falloffLevels: 1
-  chunkSize: 4000
+  pointsPerAxis: 40
+  renderDistance: 5000
+  falloffLevels: 3
+  chunkSize: 500
   chunkFloor: -1000
   chunkCeil: 1000
   chunkPrefab: {fileID: 7692411822911535626, guid: aa6b1039f5ba6d24f8a07e9df6347b3a, type: 3}
@@ -491,6 +491,7 @@ GameObject:
   - component: {fileID: 1935778201}
   - component: {fileID: 1935778200}
   - component: {fileID: 1935778199}
+  - component: {fileID: 1935778203}
   m_Layer: 0
   m_Name: Player
   m_TagString: Untagged
@@ -575,6 +576,19 @@ Transform:
   m_Father: {fileID: 0}
   m_RootOrder: 2
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1935778203
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1935778198}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0f0e8d3e267952f4ea93b2ee8b5a8262, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  densityShader: {fileID: 0}
 --- !u!1 &1998847216
 GameObject:
   m_ObjectHideFlags: 0
@@ -705,6 +719,7 @@ MonoBehaviour:
   cutoffGradFloor: -500
   cutoffGradCeil: -750
   ambientOcclusionDistance: 500
+  noiseTimeOffsets: {x: 15, y: 3, z: 5}
 --- !u!4 &2085211916
 Transform:
   m_ObjectHideFlags: 0

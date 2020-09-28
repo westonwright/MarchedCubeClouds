@@ -1,5 +1,7 @@
-#pragma kernel PointDensity
-#pragma kernel March
+#pragma kernel PointValues
+#pragma kernel PointNormals
+#pragma kernel MarchCubes
+#pragma kernel SingleValue
 #include "/Includes/Noise.compute"
 #include "/Includes/TriangulationTable.compute"
 #include "/Includes/Rays.compute"
@@ -7,21 +9,25 @@
 static const int numThreads = 8;
 
 // Noise settings
-int numPointsPerAxis;
+int pointsPerAxis;
 float chunkSize;
 float3 chunkSection;
 
 int octaves;
 float noiseScale;
+float3 noiseTimeOffsets;
 float cloudsGradFloor;
 float cloudsGradCeil;
 float cutoffGradFloor;
 float cutoffGradCeil;
 
 float surfaceLevel;
-float ambientOcclusionDistance;
 
 float timePassed;
+
+RWStructuredBuffer<float4> pointValues;
+
+RWStructuredBuffer<float3> pointNormals;
 
 struct Triangle
 {
@@ -41,8 +47,11 @@ struct CubeVert
     float3 normal;
 };
 
-RWStructuredBuffer<float4> pointValues;
+float ambientOcclusionDistance;
 AppendStructuredBuffer<Triangle> triangles;
+
+float3 singleValuePosition;
+AppendStructuredBuffer<float> singleValue;
 
 
 float CalcNoise(float3 noisePos, float scale, int oct) 
@@ -65,17 +74,17 @@ float Gradient(float3 pointPosition, float gradFloor, float gradCeil, float min,
 
 float PositionFromLevel(int axisLevel, float axisPos) 
 {
-    return ((axisLevel - 1) * (chunkSize / (numPointsPerAxis - 3))) + (axisPos - (.5f * chunkSize));
+    return ((axisLevel - 1) * (chunkSize / (pointsPerAxis - 3))) + (axisPos - (.5f * chunkSize));
 }
 
 int PointIndex(int x, int y, int z)
 {
-    return (numPointsPerAxis * numPointsPerAxis * y) + (numPointsPerAxis * z) + x;
+    return (pointsPerAxis * pointsPerAxis * y) + (pointsPerAxis * z) + x;
 }
 
-float DensityMap(float3 currentPosition, float xOffset, float yOffset, float zOffset)
+float DensityMap(float3 currentPosition, float3 offsets)
 {
-    float3 noisePosition = float3(currentPosition.x + timePassed * xOffset, currentPosition.y + timePassed * yOffset, currentPosition.z + timePassed * zOffset);
+    float3 noisePosition = float3(currentPosition.x + timePassed * offsets.x, currentPosition.y + timePassed * offsets.y, currentPosition.z + timePassed * offsets.z);
     float densityValue;
     densityValue = CalcNoise(noisePosition, noiseScale, octaves);
     //densityValue /= 2;
@@ -91,9 +100,9 @@ float DensityMap(float3 currentPosition, float xOffset, float yOffset, float zOf
 }
 
 [numthreads(numThreads, numThreads, numThreads)]
-void PointDensity(int3 id : SV_DispatchThreadID)
+void PointValues(int3 id : SV_DispatchThreadID)
 {
-    if (id.x >= numPointsPerAxis || id.y >= numPointsPerAxis || id.z >= numPointsPerAxis) 
+    if (id.x >= pointsPerAxis || id.y >= pointsPerAxis || id.z >= pointsPerAxis) 
     {
         return;
     }
@@ -102,21 +111,14 @@ void PointDensity(int3 id : SV_DispatchThreadID)
     float yPos = PositionFromLevel(id.y, chunkSection.y);
     float zPos = PositionFromLevel(id.z, chunkSection.z);
     float3 currentPosition = float3(xPos, yPos, zPos);
-    int pointIndex = PointIndex(id.x, id.y, id.z);
 
-    float pointDisplacement = DensityMap(currentPosition, 15, 3, 5);
+    float pointDisplacement = DensityMap(currentPosition, noiseTimeOffsets);
 
-    pointValues[pointIndex] = float4(xPos, yPos, zPos, pointDisplacement);
-}
-
-float3 interpolateVerts(float4 v1, float4 v2)
-{
-    float t = (surfaceLevel - v1.w) / (v2.w - v1.w);
-    return v1.xyz + t * (v2.xyz - v1.xyz);
+    pointValues[PointIndex(id.x, id.y, id.z)] = float4(xPos, yPos, zPos, pointDisplacement);
 }
 
 
-float3 baseNormals(int x, int y, int z)
+float3 PointNormal(int x, int y, int z)
 {
     float normX = (pointValues[PointIndex(x + 1, y, z)].w - pointValues[PointIndex(x - 1, y, z)].w) / 2;
     float normY = (pointValues[PointIndex(x, y + 1, z)].w - pointValues[PointIndex(x, y - 1, z)].w) / 2;
@@ -124,7 +126,25 @@ float3 baseNormals(int x, int y, int z)
     return normalize(float3(-normX, -normY, -normZ));
 }
 
-float3 slerp(float3 start, float3 end, float percent)
+[numthreads(numThreads, numThreads, numThreads)]
+void PointNormals(int3 id : SV_DispatchThreadID) 
+{
+    if (id.x >= pointsPerAxis || id.y >= pointsPerAxis || id.z >= pointsPerAxis)
+    {
+        return;
+    }
+
+    pointNormals[PointIndex(id.x, id.y, id.z)] = PointNormal(id.x, id.y, id.z);
+}
+
+
+float3 InterpolateVerts(float4 v1, float4 v2)
+{
+    float t = (surfaceLevel - v1.w) / (v2.w - v1.w);
+    return v1.xyz + t * (v2.xyz - v1.xyz);
+}
+
+float3 Slerp(float3 start, float3 end, float percent)
 {
     // Dot product - the cosine of the angle between 2 vectors.
     float dotP = dot(start, end);
@@ -142,14 +162,14 @@ float3 slerp(float3 start, float3 end, float percent)
     return ((start * cos(theta)) + (RelativeVec * sin(theta)));
 }
 
-float3 interpolateNorms(CubeVert cubeA, CubeVert cubeB)
+float3 InterpolateNorms(CubeVert cubeA, CubeVert cubeB)
 {
     float t = (surfaceLevel - cubeA.vert.w) / (cubeB.vert.w - cubeA.vert.w);
 
-    return slerp(cubeA.normal, cubeB.normal, t);
+    return Slerp(cubeA.normal, cubeB.normal, t);
 }
 
-float thickness(float3 pointPosition)
+float Thickness(float3 pointPosition)
 {
     float total = 0;
     for (int i = 0; i < 32; i++) 
@@ -158,7 +178,7 @@ float thickness(float3 pointPosition)
         for (int j = 0; j < 4; j++)
         {
             float3 checkPosition = pointPosition + ((float3(rays[(i * 3)], rays[(i * 3) + 1], rays[(i * 3) + 2])) * ((ambientOcclusionDistance / 4) * (j + 1)));
-            if (DensityMap(checkPosition, 15, 3, 5) < surfaceLevel)
+            if (DensityMap(checkPosition, noiseTimeOffsets) < surfaceLevel)
             {
                 blocked = true;
                 break;
@@ -172,7 +192,7 @@ float thickness(float3 pointPosition)
     return total / (float)32;
 }
 
-float ambientOcclusion(float3 pointPosition)
+float AmbientOcclusion(float3 pointPosition)
 {
     float total = 0;
     for (int i = 0; i < 32; i++)
@@ -181,7 +201,7 @@ float ambientOcclusion(float3 pointPosition)
         for (int j = 0; j < 4; j++)
         {
             float3 checkPosition = pointPosition + ((float3(rays[(i * 3)], rays[(i * 3) + 1], rays[(i * 3) + 2])) * ((ambientOcclusionDistance / 4) * (j + 1)));
-            if (DensityMap(checkPosition, 15, 3, 5) > surfaceLevel)
+            if (DensityMap(checkPosition, noiseTimeOffsets) > surfaceLevel)
             {
                 blocked = true;
                 break;
@@ -195,11 +215,11 @@ float ambientOcclusion(float3 pointPosition)
 }
 
 [numthreads(numThreads, numThreads, numThreads)]
-void March(int3 id : SV_DispatchThreadID)
+void MarchCubes(int3 id : SV_DispatchThreadID)
 {
     // Stop two before the end because voxel includes neighbouring points
     // and there is an extra voxel for normal calculation
-    if ((id.x >= numPointsPerAxis - 2 || id.y >= numPointsPerAxis - 2 || id.z >= numPointsPerAxis - 2) || (id.x < 1 || id.y < 1 || id.z < 1))
+    if ((id.x >= pointsPerAxis - 2 || id.y >= pointsPerAxis - 2 || id.z >= pointsPerAxis - 2) || (id.x < 1 || id.y < 1 || id.z < 1))
     {
         return;
     }
@@ -214,14 +234,14 @@ void March(int3 id : SV_DispatchThreadID)
     cubeVerts[5].vert = pointValues[PointIndex(id.x + 1, id.y + 1, id.z)];
     cubeVerts[6].vert = pointValues[PointIndex(id.x + 1, id.y + 1, id.z + 1)];
     cubeVerts[7].vert = pointValues[PointIndex(id.x, id.y + 1, id.z + 1)];
-    cubeVerts[0].normal = baseNormals(id.x, id.y, id.z); 
-    cubeVerts[1].normal = baseNormals(id.x + 1, id.y, id.z);
-    cubeVerts[2].normal = baseNormals(id.x + 1, id.y, id.z + 1); 
-    cubeVerts[3].normal = baseNormals(id.x, id.y, id.z + 1); 
-    cubeVerts[4].normal = baseNormals(id.x, id.y + 1, id.z); 
-    cubeVerts[5].normal = baseNormals(id.x + 1, id.y + 1, id.z); 
-    cubeVerts[6].normal = baseNormals(id.x + 1, id.y + 1, id.z + 1); 
-    cubeVerts[7].normal = baseNormals(id.x, id.y + 1, id.z + 1); 
+    cubeVerts[0].normal = pointNormals[PointIndex(id.x, id.y, id.z)];
+    cubeVerts[1].normal = pointNormals[PointIndex(id.x + 1, id.y, id.z)];
+    cubeVerts[2].normal = pointNormals[PointIndex(id.x + 1, id.y, id.z + 1)];
+    cubeVerts[3].normal = pointNormals[PointIndex(id.x, id.y, id.z + 1)];
+    cubeVerts[4].normal = pointNormals[PointIndex(id.x, id.y + 1, id.z)];
+    cubeVerts[5].normal = pointNormals[PointIndex(id.x + 1, id.y + 1, id.z)];
+    cubeVerts[6].normal = pointNormals[PointIndex(id.x + 1, id.y + 1, id.z + 1)];
+    cubeVerts[7].normal = pointNormals[PointIndex(id.x, id.y + 1, id.z + 1)];
 
     // Calculate unique index for each cube configuration.
     // There are 256 possible values
@@ -251,23 +271,23 @@ void March(int3 id : SV_DispatchThreadID)
         int indexB2 = cornerIndexBFromEdge[triangulation[cubeIndex][i + 2]];
 
         Triangle tri;
-        tri.vertex0 = interpolateVerts(cubeVerts[indexA0].vert, cubeVerts[indexB0].vert);
-        tri.vertex1 = interpolateVerts(cubeVerts[indexA1].vert, cubeVerts[indexB1].vert);
-        tri.vertex2 = interpolateVerts(cubeVerts[indexA2].vert, cubeVerts[indexB2].vert);
+        tri.vertex0 = InterpolateVerts(cubeVerts[indexA0].vert, cubeVerts[indexB0].vert);
+        tri.vertex1 = InterpolateVerts(cubeVerts[indexA1].vert, cubeVerts[indexB1].vert);
+        tri.vertex2 = InterpolateVerts(cubeVerts[indexA2].vert, cubeVerts[indexB2].vert);
 
-        tri.normal0 = interpolateNorms(cubeVerts[indexA0], cubeVerts[indexB0]);
-        tri.normal1 = interpolateNorms(cubeVerts[indexA1], cubeVerts[indexB1]);
-        tri.normal2 = interpolateNorms(cubeVerts[indexA2], cubeVerts[indexB2]);
+        tri.normal0 = InterpolateNorms(cubeVerts[indexA0], cubeVerts[indexB0]);
+        tri.normal1 = InterpolateNorms(cubeVerts[indexA1], cubeVerts[indexB1]);
+        tri.normal2 = InterpolateNorms(cubeVerts[indexA2], cubeVerts[indexB2]);
 
         //tri color x is ambient occlusion
         //tri color y is thickness
-        tri.color0.x = ambientOcclusion(tri.vertex0);
-        tri.color1.x = ambientOcclusion(tri.vertex1);
-        tri.color2.x = ambientOcclusion(tri.vertex2);
+        tri.color0.x = AmbientOcclusion(tri.vertex0);
+        tri.color1.x = AmbientOcclusion(tri.vertex1);
+        tri.color2.x = AmbientOcclusion(tri.vertex2);
 
-        tri.color0.y = thickness(tri.vertex0);
-        tri.color1.y = thickness(tri.vertex1);
-        tri.color2.y = thickness(tri.vertex2);
+        tri.color0.y = Thickness(tri.vertex0);
+        tri.color1.y = Thickness(tri.vertex1);
+        tri.color2.y = Thickness(tri.vertex2);
 
         tri.color0.z = 0;
         tri.color1.z = 0;
@@ -275,4 +295,11 @@ void March(int3 id : SV_DispatchThreadID)
 
         triangles.Append(tri);
     }
+}
+
+
+[numthreads(numThreads, numThreads, numThreads)]
+void SingleValue(int3 id : SV_DispatchThreadID) 
+{
+    singleValue.Append(DensityMap(singleValuePosition, noiseTimeOffsets));
 }
