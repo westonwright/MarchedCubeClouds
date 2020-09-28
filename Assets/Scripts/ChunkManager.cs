@@ -128,7 +128,7 @@ public class ChunkManager : MonoBehaviour
         foreach(Chunk chunk in chunks)
         {
             densityGenerator.CalculatePoints(chunk);
-            meshGenerator.DrawChunk(chunk);
+            //meshGenerator.DrawChunk(chunk);
         }
     }
 
@@ -137,9 +137,9 @@ public class ChunkManager : MonoBehaviour
         Gizmos.color = Color.white;
         foreach (var chunk in chunks)
         {
-            Gizmos.color = new Color(1, 1, 1, .5f);
+            //Gizmos.color = new Color(1, 1, 1, .5f);
             //Gizmos.DrawWireCube(chunk.section, Vector3.one * (chunk.size / 2));
-            Gizmos.DrawWireCube(chunk.section, Vector3.one * (chunk.size));
+            //Gizmos.DrawWireCube(chunk.section, Vector3.one * (chunk.size));
         }
     }
 }

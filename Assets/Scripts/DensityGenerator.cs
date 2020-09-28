@@ -6,6 +6,7 @@ public class DensityGenerator : MonoBehaviour
 {
     public ComputeShader densityShader;
 
+    public float surfaceLevel = .1f;
     public int octaves = 1;
     public float noiseScale = 1;
 
@@ -13,30 +14,28 @@ public class DensityGenerator : MonoBehaviour
     public float cloudsGradCeil = 50f;
     public float cutoffGradFloor = 0f;
     public float cutoffGradCeil = 50f;
- 
+
+    public float ambientOcclusionDistance = 500;
+
     private float timePassed = 0;
     private ComputeBuffer pointValsBuffer;
-    private ComputeBuffer permBuffer;
+    private ComputeBuffer triangleBuffer;
+    private ComputeBuffer triCountBuffer;
+
+    private MeshFilter meshFilter;
+    private Mesh mesh;
+
+    private Triangle[] tris;
+
+    private Vector3[] vertices;
+    private Vector3[] normals;
+    private Color[] colors;
+    private int[] meshTriangles;
 
     //PointVisualizer pointVisualizer;
 
     const int threadGroupSize = 8;
-    static int[] perm = new int[] {
-        151,160,137,91,90,15,
-        131,13,201,95,96,53,194,233,7,225,140,36,103,30,69,142,8,99,37,240,21,10,23,
-        190, 6,148,247,120,234,75,0,26,197,62,94,252,219,203,117,35,11,32,57,177,33,
-        88,237,149,56,87,174,20,125,136,171,168, 68,175,74,165,71,134,139,48,27,166,
-        77,146,158,231,83,111,229,122,60,211,133,230,220,105,92,41,55,46,245,40,244,
-        102,143,54, 65,25,63,161, 1,216,80,73,209,76,132,187,208, 89,18,169,200,196,
-        135,130,116,188,159,86,164,100,109,198,173,186, 3,64,52,217,226,250,124,123,
-        5,202,38,147,118,126,255,82,85,212,207,206,59,227,47,16,58,17,182,189,28,42,
-        223,183,170,213,119,248,152, 2,44,154,163, 70,221,153,101,155,167, 43,172,9,
-        129,22,39,253, 19,98,108,110,79,113,224,232,178,185, 112,104,218,246,97,228,
-        251,34,242,193,238,210,144,12,191,179,162,241, 81,51,145,235,249,14,239,107,
-        49,192,214, 31,181,199,106,157,184, 84,204,176,115,121,50,45,127, 4,150,254,
-        138,236,205,93,222,114,67,29,24,72,243,141,128,195,78,66,215,61,156,180,
-        151
-    };
+    int numThreadsPerAxis;
 
     private void Start()
     {
@@ -49,13 +48,14 @@ public class DensityGenerator : MonoBehaviour
 
     public void CalculatePoints(Chunk chunk)
     {
-        CreateBuffer(chunk);
-        int numThreadsPerAxis = Mathf.CeilToInt(chunk.pointsPerAxis / (float)threadGroupSize);
+        CreateBuffers(chunk);
+
+        numThreadsPerAxis = Mathf.CeilToInt(chunk.pointsPerAxis / (float)threadGroupSize);
 
         pointValsBuffer.SetData(chunk.points);
-        permBuffer.SetData(perm);
-        densityShader.SetBuffer(0, "perm", permBuffer);
         densityShader.SetBuffer(0, "pointValues", pointValsBuffer);
+        densityShader.SetFloat("surfaceLevel", surfaceLevel);
+        densityShader.SetFloat("ambientOcclusionDistance", ambientOcclusionDistance);
         densityShader.SetInt("numPointsPerAxis", chunk.pointsPerAxis);
         densityShader.SetFloat("chunkSize", chunk.size);
         densityShader.SetFloats("chunkSection", new float[] { chunk.section.x, chunk.section.y, chunk.section.z });
@@ -68,24 +68,123 @@ public class DensityGenerator : MonoBehaviour
         densityShader.SetFloat("timePassed", timePassed);
 
         densityShader.Dispatch(0, numThreadsPerAxis, numThreadsPerAxis, numThreadsPerAxis);
+        //pointValsBuffer.GetData(chunk.points, 0, 0, chunk.points.Length);
 
-        pointValsBuffer.GetData(chunk.points, 0, 0, chunk.points.Length);
+        int numVoxelsPerAxis = chunk.pointsPerAxis - 1;
+        numThreadsPerAxis = Mathf.CeilToInt(numVoxelsPerAxis / (float)threadGroupSize);
 
-        ReleaseBuffer();
-    }
+        //pointValsBuffer.GetData(chunk.points);
+        //pointValsBuffer.SetData(chunk.points);
+        triangleBuffer.SetCounterValue(0);
+        densityShader.SetBuffer(1, "pointValues", pointValsBuffer);
+        densityShader.SetBuffer(1, "triangles", triangleBuffer);
 
-    void CreateBuffer(Chunk chunk)
-    {
-        pointValsBuffer = new ComputeBuffer(chunk.points.Length, sizeof(float) * 4);
-        permBuffer = new ComputeBuffer(perm.Length, sizeof(int));
-    }
+        densityShader.Dispatch(1, numThreadsPerAxis, numThreadsPerAxis, numThreadsPerAxis);
 
-    void ReleaseBuffer()
-    {
-        if (pointValsBuffer != null)
+        // Get number of triangles in the triangle buffer
+        ComputeBuffer.CopyCount(triangleBuffer, triCountBuffer, 0);
+        int[] triCountArray = { 0 };
+        triCountBuffer.GetData(triCountArray);
+        int numTris = triCountArray[0];
+        // Get triangle data from shader
+        tris = new Triangle[numTris];
+        //tris = new Triangle[5000000];
+        triangleBuffer.GetData(tris, 0, 0, numTris);
+
+        meshFilter = chunk.chunkObject.GetComponent<MeshFilter>(); ;
+        mesh = meshFilter.mesh ?? new Mesh();
+        mesh.Clear();
+
+        vertices = new Vector3[numTris * 3];
+        normals = new Vector3[numTris * 3];
+        colors = new Color[numTris * 3];
+        meshTriangles = new int[numTris * 3];
+
+        for (int i = 0; i < numTris; i++)
         {
+            for (int j = 0; j < 3; j++)
+            {
+                meshTriangles[i * 3 + j] = i * 3 + j;
+                vertices[i * 3 + j] = tris[i][j];
+                normals[i * 3 + j] = tris[i][j + 3];
+                Vector3 colVal = tris[i][j + 6];
+                colors[i * 3 + j] = new Color(colVal.x, colVal.y, colVal.z);
+            }
+        }
+        mesh.vertices = vertices;
+        mesh.triangles = meshTriangles;
+        mesh.normals = normals;
+        mesh.colors = colors;
+        meshFilter.mesh = mesh;
+
+
+        ReleaseBuffers();
+
+        if (!Application.isPlaying)
+        {
+            ReleaseBuffers();
+        }
+    }
+
+    void CreateBuffers(Chunk chunk)
+    {
+        int numVoxelsPerAxis = chunk.pointsPerAxis - 1;
+        int numVoxels = numVoxelsPerAxis * numVoxelsPerAxis * numVoxelsPerAxis;
+        int maxTriangleCount = numVoxels * 5;
+
+        triangleBuffer = new ComputeBuffer(maxTriangleCount, sizeof(float) * 3 * 9, ComputeBufferType.Append);
+        pointValsBuffer = new ComputeBuffer(chunk.points.Length, sizeof(float) * 4);
+        triCountBuffer = new ComputeBuffer(1, sizeof(int), ComputeBufferType.Raw);
+    }
+
+    void ReleaseBuffers()
+    {
+        if (triangleBuffer != null)
+        {
+            triangleBuffer.Release();
             pointValsBuffer.Release();
-            permBuffer.Release();
+            triCountBuffer.Release();
+        }
+    }
+    struct Triangle
+    {
+        #pragma warning disable 649 // disable unassigned variable warning
+        public Vector3 v0;
+        public Vector3 v1;
+        public Vector3 v2;
+        public Vector3 n0;
+        public Vector3 n1;
+        public Vector3 n2;
+        public Vector3 c0;
+        public Vector3 c1;
+        public Vector3 c2;
+
+        public Vector3 this[int i]
+        {
+            get
+            {
+                switch (i)
+                {
+                    case 0:
+                        return v0;
+                    case 1:
+                        return v1;
+                    case 2:
+                        return v2;
+                    case 3:
+                        return n0;
+                    case 4:
+                        return n1;
+                    case 5:
+                        return n2;
+                    case 6:
+                        return c0;
+                    case 7:
+                        return c1;
+                    default:
+                        return c2;
+                }
+            }
         }
     }
 }

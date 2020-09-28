@@ -10,9 +10,9 @@ Shader "PBR Master"
         Vector1_D4B45908("Noise Speed", Float) = 0.01
         Vector1_48E1DFAE("Noise Light Strength", Float) = 0.5
         Vector1_8C0B9D56("Displacement Strength", Float) = 0.5
-        Vector1_CF216209("SSS Distortion", Float) = 0.7
-        Vector1_B33D0616("SSS Power", Float) = 2.5
-        Vector1_68A1BB04("SSS Scale", Float) = 1
+        Vector1_CF216209("SSS Distortion", Float) = 0.5
+        Vector1_B33D0616("SSS Power", Float) = 1
+        Vector1_68A1BB04("SSS Scale", Float) = 0.5
     }
     SubShader
     {
@@ -73,9 +73,11 @@ Shader "PBR Master"
             #define ATTRIBUTES_NEED_NORMAL
             #define ATTRIBUTES_NEED_TANGENT
             #define ATTRIBUTES_NEED_TEXCOORD1
+            #define ATTRIBUTES_NEED_COLOR
             #define VARYINGS_NEED_POSITION_WS 
             #define VARYINGS_NEED_NORMAL_WS
             #define VARYINGS_NEED_TANGENT_WS
+            #define VARYINGS_NEED_COLOR
             #define VARYINGS_NEED_VIEWDIRECTION_WS
             #define VARYINGS_NEED_FOG_AND_VERTEX_LIGHT
             #define FEATURES_GRAPH_VERTEX
@@ -349,11 +351,6 @@ Shader "PBR Master"
                 Out = dot(A, B);
             }
             
-            void Unity_Multiply_float(float4 A, float4 B, out float4 Out)
-            {
-                Out = A * B;
-            }
-            
             void Unity_SceneDepth_Eye_float(float4 UV, out float Out)
             {
                 Out = LinearEyeDepth(SHADERGRAPH_SAMPLE_SCENE_DEPTH(UV.xy), _ZBufferParams);
@@ -460,6 +457,7 @@ Shader "PBR Master"
                 float3 WorldSpaceViewDirection;
                 float3 WorldSpacePosition;
                 float4 ScreenPosition;
+                float4 VertexColor;
                 float3 TimeParameters;
             };
             
@@ -503,6 +501,18 @@ Shader "PBR Master"
                 Unity_Add_float3(_Add_1CD24747_Out_2, _Add_F5A8978D_Out_2, _Add_811BA667_Out_2);
                 float3 _Multiply_DEE8590F_Out_2;
                 Unity_Multiply_float((_Property_B4F6F86A_Out_0.xyz), _Add_811BA667_Out_2, _Multiply_DEE8590F_Out_2);
+                float _Split_A5DF2325_R_1 = IN.VertexColor[0];
+                float _Split_A5DF2325_G_2 = IN.VertexColor[1];
+                float _Split_A5DF2325_B_3 = IN.VertexColor[2];
+                float _Split_A5DF2325_A_4 = IN.VertexColor[3];
+                float _Multiply_4C9C3B8B_Out_2;
+                Unity_Multiply_float(_Split_A5DF2325_R_1, 2, _Multiply_4C9C3B8B_Out_2);
+                float _Saturate_E5DBF15D_Out_1;
+                Unity_Saturate_float(_Multiply_4C9C3B8B_Out_2, _Saturate_E5DBF15D_Out_1);
+                float3 _Multiply_F910F817_Out_2;
+                Unity_Multiply_float(_Multiply_DEE8590F_Out_2, (_Saturate_E5DBF15D_Out_1.xxx), _Multiply_F910F817_Out_2);
+                float _Remap_8DC71B3F_Out_3;
+                Unity_Remap_float(_Split_A5DF2325_G_2, float2 (0.5, 1), float2 (0, 1), _Remap_8DC71B3F_Out_3);
                 float3 _Normalize_ADBDED10_Out_1;
                 Unity_Normalize_float3(IN.WorldSpaceViewDirection, _Normalize_ADBDED10_Out_1);
                 Bindings_GetMainLight_fc884d5c668d29144bb1456de0af6c36 _GetMainLight_F1F4647E;
@@ -582,8 +592,10 @@ Shader "PBR Master"
                 float _Property_EE224157_Out_0 = Vector1_68A1BB04;
                 float _DotProduct_3F168FC8_Out_2;
                 Unity_DotProduct_float(_Power_36F9A28C_Out_2, _Property_EE224157_Out_0, _DotProduct_3F168FC8_Out_2);
+                float _Multiply_17EAAD3_Out_2;
+                Unity_Multiply_float(_Remap_8DC71B3F_Out_3, _DotProduct_3F168FC8_Out_2, _Multiply_17EAAD3_Out_2);
                 float _Saturate_FFB08A4E_Out_1;
-                Unity_Saturate_float(_DotProduct_3F168FC8_Out_2, _Saturate_FFB08A4E_Out_1);
+                Unity_Saturate_float(_Multiply_17EAAD3_Out_2, _Saturate_FFB08A4E_Out_1);
                 Bindings_GetMainLight_fc884d5c668d29144bb1456de0af6c36 _GetMainLight_9F13029;
                 _GetMainLight_9F13029.WorldSpacePosition = IN.WorldSpacePosition;
                 half3 _GetMainLight_9F13029_Direction_0;
@@ -593,15 +605,11 @@ Shader "PBR Master"
                 SG_GetMainLight_fc884d5c668d29144bb1456de0af6c36(_GetMainLight_9F13029, _GetMainLight_9F13029_Direction_0, _GetMainLight_9F13029_Color_1, _GetMainLight_9F13029_DistanceAtten_2, _GetMainLight_9F13029_ShadowAtten_3);
                 float3 _Multiply_4ADD9031_Out_2;
                 Unity_Multiply_float((_Saturate_FFB08A4E_Out_1.xxx), _GetMainLight_9F13029_Color_1, _Multiply_4ADD9031_Out_2);
-                float3 _Multiply_59470CF4_Out_2;
-                Unity_Multiply_float((_Property_B4F6F86A_Out_0.xyz), _Multiply_4ADD9031_Out_2, _Multiply_59470CF4_Out_2);
-                float3 _Add_4F9D38F7_Out_2;
-                Unity_Add_float3(_Multiply_DEE8590F_Out_2, _Multiply_59470CF4_Out_2, _Add_4F9D38F7_Out_2);
-                float4 _Property_3351416A_Out_0 = Color_1A413B9C;
-                float4 _Multiply_42A7AC12_Out_2;
-                Unity_Multiply_float(_Property_3351416A_Out_0, _Property_B4F6F86A_Out_0, _Multiply_42A7AC12_Out_2);
                 float3 _Add_B33784D3_Out_2;
-                Unity_Add_float3(_Add_4F9D38F7_Out_2, (_Multiply_42A7AC12_Out_2.xyz), _Add_B33784D3_Out_2);
+                Unity_Add_float3(_Multiply_F910F817_Out_2, _Multiply_4ADD9031_Out_2, _Add_B33784D3_Out_2);
+                float4 _Property_81C60D7E_Out_0 = Color_1A413B9C;
+                float3 _Add_9C0E1EB1_Out_2;
+                Unity_Add_float3(_Add_B33784D3_Out_2, (_Property_81C60D7E_Out_0.xyz), _Add_9C0E1EB1_Out_2);
                 float _SceneDepth_4FAE51A0_Out_1;
                 Unity_SceneDepth_Eye_float(float4(IN.ScreenPosition.xy / IN.ScreenPosition.w, 0, 0), _SceneDepth_4FAE51A0_Out_1);
                 float4 _ScreenPosition_8E746D1E_Out_0 = IN.ScreenPosition;
@@ -614,12 +622,12 @@ Shader "PBR Master"
                 float _Subtract_68104637_Out_2;
                 Unity_Subtract_float(_SceneDepth_4FAE51A0_Out_1, _Subtract_42FE7ACD_Out_2, _Subtract_68104637_Out_2);
                 float _Divide_564AD5D6_Out_2;
-                Unity_Divide_float(_Subtract_68104637_Out_2, 100, _Divide_564AD5D6_Out_2);
+                Unity_Divide_float(_Subtract_68104637_Out_2, 50, _Divide_564AD5D6_Out_2);
                 float _Saturate_2F42B045_Out_1;
                 Unity_Saturate_float(_Divide_564AD5D6_Out_2, _Saturate_2F42B045_Out_1);
                 surface.Albedo = IsGammaSpace() ? float3(0, 0, 0) : SRGBToLinear(float3(0, 0, 0));
                 surface.Normal = IN.TangentSpaceNormal;
-                surface.Emission = _Add_B33784D3_Out_2;
+                surface.Emission = _Add_9C0E1EB1_Out_2;
                 surface.Metallic = 0;
                 surface.Smoothness = 0;
                 surface.Occlusion = 0;
@@ -638,6 +646,7 @@ Shader "PBR Master"
                 float3 normalOS : NORMAL;
                 float4 tangentOS : TANGENT;
                 float4 uv1 : TEXCOORD1;
+                float4 color : COLOR;
                 #if UNITY_ANY_INSTANCING_ENABLED
                 uint instanceID : INSTANCEID_SEMANTIC;
                 #endif
@@ -650,6 +659,7 @@ Shader "PBR Master"
                 float3 positionWS;
                 float3 normalWS;
                 float4 tangentWS;
+                float4 color;
                 float3 viewDirectionWS;
                 #if defined(LIGHTMAP_ON)
                 float2 lightmapUV;
@@ -687,11 +697,12 @@ Shader "PBR Master"
                 float3 interp00 : TEXCOORD0;
                 float3 interp01 : TEXCOORD1;
                 float4 interp02 : TEXCOORD2;
-                float3 interp03 : TEXCOORD3;
-                float2 interp04 : TEXCOORD4;
-                float3 interp05 : TEXCOORD5;
-                float4 interp06 : TEXCOORD6;
+                float4 interp03 : TEXCOORD3;
+                float3 interp04 : TEXCOORD4;
+                float2 interp05 : TEXCOORD5;
+                float3 interp06 : TEXCOORD6;
                 float4 interp07 : TEXCOORD7;
+                float4 interp08 : TEXCOORD8;
                 #if (defined(UNITY_STEREO_INSTANCING_ENABLED))
                 uint stereoTargetEyeIndexAsRTArrayIdx : SV_RenderTargetArrayIndex;
                 #endif
@@ -711,15 +722,16 @@ Shader "PBR Master"
                 output.interp00.xyz = input.positionWS;
                 output.interp01.xyz = input.normalWS;
                 output.interp02.xyzw = input.tangentWS;
-                output.interp03.xyz = input.viewDirectionWS;
+                output.interp03.xyzw = input.color;
+                output.interp04.xyz = input.viewDirectionWS;
                 #if defined(LIGHTMAP_ON)
-                output.interp04.xy = input.lightmapUV;
+                output.interp05.xy = input.lightmapUV;
                 #endif
                 #if !defined(LIGHTMAP_ON)
-                output.interp05.xyz = input.sh;
+                output.interp06.xyz = input.sh;
                 #endif
-                output.interp06.xyzw = input.fogFactorAndVertexLight;
-                output.interp07.xyzw = input.shadowCoord;
+                output.interp07.xyzw = input.fogFactorAndVertexLight;
+                output.interp08.xyzw = input.shadowCoord;
                 #if UNITY_ANY_INSTANCING_ENABLED
                 output.instanceID = input.instanceID;
                 #endif
@@ -743,15 +755,16 @@ Shader "PBR Master"
                 output.positionWS = input.interp00.xyz;
                 output.normalWS = input.interp01.xyz;
                 output.tangentWS = input.interp02.xyzw;
-                output.viewDirectionWS = input.interp03.xyz;
+                output.color = input.interp03.xyzw;
+                output.viewDirectionWS = input.interp04.xyz;
                 #if defined(LIGHTMAP_ON)
-                output.lightmapUV = input.interp04.xy;
+                output.lightmapUV = input.interp05.xy;
                 #endif
                 #if !defined(LIGHTMAP_ON)
-                output.sh = input.interp05.xyz;
+                output.sh = input.interp06.xyz;
                 #endif
-                output.fogFactorAndVertexLight = input.interp06.xyzw;
-                output.shadowCoord = input.interp07.xyzw;
+                output.fogFactorAndVertexLight = input.interp07.xyzw;
+                output.shadowCoord = input.interp08.xyzw;
                 #if UNITY_ANY_INSTANCING_ENABLED
                 output.instanceID = input.instanceID;
                 #endif
@@ -801,6 +814,7 @@ Shader "PBR Master"
                 output.WorldSpaceViewDirection =     input.viewDirectionWS; //TODO: by default normalized in HD, but not in universal
                 output.WorldSpacePosition =          input.positionWS;
                 output.ScreenPosition =              ComputeScreenPos(TransformWorldToHClip(input.positionWS), _ProjectionParams.x);
+                output.VertexColor =                 input.color;
                 output.TimeParameters =              _TimeParameters.xyz; // This is mainly for LW as HD overwrite this value
             #if defined(SHADER_STAGE_FRAGMENT) && defined(VARYINGS_NEED_CULLFACE)
             #define BUILD_SURFACE_DESCRIPTION_INPUTS_OUTPUT_FACESIGN output.FaceSign =                    IS_FRONT_VFACE(input.cullFace, true, false);
@@ -1121,7 +1135,7 @@ Shader "PBR Master"
                 float _Subtract_68104637_Out_2;
                 Unity_Subtract_float(_SceneDepth_4FAE51A0_Out_1, _Subtract_42FE7ACD_Out_2, _Subtract_68104637_Out_2);
                 float _Divide_564AD5D6_Out_2;
-                Unity_Divide_float(_Subtract_68104637_Out_2, 100, _Divide_564AD5D6_Out_2);
+                Unity_Divide_float(_Subtract_68104637_Out_2, 50, _Divide_564AD5D6_Out_2);
                 float _Saturate_2F42B045_Out_1;
                 Unity_Saturate_float(_Divide_564AD5D6_Out_2, _Saturate_2F42B045_Out_1);
                 surface.Alpha = _Saturate_2F42B045_Out_1;
@@ -1571,7 +1585,7 @@ Shader "PBR Master"
                 float _Subtract_68104637_Out_2;
                 Unity_Subtract_float(_SceneDepth_4FAE51A0_Out_1, _Subtract_42FE7ACD_Out_2, _Subtract_68104637_Out_2);
                 float _Divide_564AD5D6_Out_2;
-                Unity_Divide_float(_Subtract_68104637_Out_2, 100, _Divide_564AD5D6_Out_2);
+                Unity_Divide_float(_Subtract_68104637_Out_2, 50, _Divide_564AD5D6_Out_2);
                 float _Saturate_2F42B045_Out_1;
                 Unity_Saturate_float(_Divide_564AD5D6_Out_2, _Saturate_2F42B045_Out_1);
                 surface.Alpha = _Saturate_2F42B045_Out_1;
@@ -1764,8 +1778,10 @@ Shader "PBR Master"
             #define ATTRIBUTES_NEED_TANGENT
             #define ATTRIBUTES_NEED_TEXCOORD1
             #define ATTRIBUTES_NEED_TEXCOORD2
+            #define ATTRIBUTES_NEED_COLOR
             #define VARYINGS_NEED_POSITION_WS 
             #define VARYINGS_NEED_NORMAL_WS
+            #define VARYINGS_NEED_COLOR
             #define VARYINGS_NEED_VIEWDIRECTION_WS
             #define FEATURES_GRAPH_VERTEX
             #pragma multi_compile_instancing
@@ -2038,11 +2054,6 @@ Shader "PBR Master"
                 Out = dot(A, B);
             }
             
-            void Unity_Multiply_float(float4 A, float4 B, out float4 Out)
-            {
-                Out = A * B;
-            }
-            
             void Unity_SceneDepth_Eye_float(float4 UV, out float Out)
             {
                 Out = LinearEyeDepth(SHADERGRAPH_SAMPLE_SCENE_DEPTH(UV.xy), _ZBufferParams);
@@ -2149,6 +2160,7 @@ Shader "PBR Master"
                 float3 WorldSpaceViewDirection;
                 float3 WorldSpacePosition;
                 float4 ScreenPosition;
+                float4 VertexColor;
                 float3 TimeParameters;
             };
             
@@ -2188,6 +2200,18 @@ Shader "PBR Master"
                 Unity_Add_float3(_Add_1CD24747_Out_2, _Add_F5A8978D_Out_2, _Add_811BA667_Out_2);
                 float3 _Multiply_DEE8590F_Out_2;
                 Unity_Multiply_float((_Property_B4F6F86A_Out_0.xyz), _Add_811BA667_Out_2, _Multiply_DEE8590F_Out_2);
+                float _Split_A5DF2325_R_1 = IN.VertexColor[0];
+                float _Split_A5DF2325_G_2 = IN.VertexColor[1];
+                float _Split_A5DF2325_B_3 = IN.VertexColor[2];
+                float _Split_A5DF2325_A_4 = IN.VertexColor[3];
+                float _Multiply_4C9C3B8B_Out_2;
+                Unity_Multiply_float(_Split_A5DF2325_R_1, 2, _Multiply_4C9C3B8B_Out_2);
+                float _Saturate_E5DBF15D_Out_1;
+                Unity_Saturate_float(_Multiply_4C9C3B8B_Out_2, _Saturate_E5DBF15D_Out_1);
+                float3 _Multiply_F910F817_Out_2;
+                Unity_Multiply_float(_Multiply_DEE8590F_Out_2, (_Saturate_E5DBF15D_Out_1.xxx), _Multiply_F910F817_Out_2);
+                float _Remap_8DC71B3F_Out_3;
+                Unity_Remap_float(_Split_A5DF2325_G_2, float2 (0.5, 1), float2 (0, 1), _Remap_8DC71B3F_Out_3);
                 float3 _Normalize_ADBDED10_Out_1;
                 Unity_Normalize_float3(IN.WorldSpaceViewDirection, _Normalize_ADBDED10_Out_1);
                 Bindings_GetMainLight_fc884d5c668d29144bb1456de0af6c36 _GetMainLight_F1F4647E;
@@ -2267,8 +2291,10 @@ Shader "PBR Master"
                 float _Property_EE224157_Out_0 = Vector1_68A1BB04;
                 float _DotProduct_3F168FC8_Out_2;
                 Unity_DotProduct_float(_Power_36F9A28C_Out_2, _Property_EE224157_Out_0, _DotProduct_3F168FC8_Out_2);
+                float _Multiply_17EAAD3_Out_2;
+                Unity_Multiply_float(_Remap_8DC71B3F_Out_3, _DotProduct_3F168FC8_Out_2, _Multiply_17EAAD3_Out_2);
                 float _Saturate_FFB08A4E_Out_1;
-                Unity_Saturate_float(_DotProduct_3F168FC8_Out_2, _Saturate_FFB08A4E_Out_1);
+                Unity_Saturate_float(_Multiply_17EAAD3_Out_2, _Saturate_FFB08A4E_Out_1);
                 Bindings_GetMainLight_fc884d5c668d29144bb1456de0af6c36 _GetMainLight_9F13029;
                 _GetMainLight_9F13029.WorldSpacePosition = IN.WorldSpacePosition;
                 half3 _GetMainLight_9F13029_Direction_0;
@@ -2278,15 +2304,11 @@ Shader "PBR Master"
                 SG_GetMainLight_fc884d5c668d29144bb1456de0af6c36(_GetMainLight_9F13029, _GetMainLight_9F13029_Direction_0, _GetMainLight_9F13029_Color_1, _GetMainLight_9F13029_DistanceAtten_2, _GetMainLight_9F13029_ShadowAtten_3);
                 float3 _Multiply_4ADD9031_Out_2;
                 Unity_Multiply_float((_Saturate_FFB08A4E_Out_1.xxx), _GetMainLight_9F13029_Color_1, _Multiply_4ADD9031_Out_2);
-                float3 _Multiply_59470CF4_Out_2;
-                Unity_Multiply_float((_Property_B4F6F86A_Out_0.xyz), _Multiply_4ADD9031_Out_2, _Multiply_59470CF4_Out_2);
-                float3 _Add_4F9D38F7_Out_2;
-                Unity_Add_float3(_Multiply_DEE8590F_Out_2, _Multiply_59470CF4_Out_2, _Add_4F9D38F7_Out_2);
-                float4 _Property_3351416A_Out_0 = Color_1A413B9C;
-                float4 _Multiply_42A7AC12_Out_2;
-                Unity_Multiply_float(_Property_3351416A_Out_0, _Property_B4F6F86A_Out_0, _Multiply_42A7AC12_Out_2);
                 float3 _Add_B33784D3_Out_2;
-                Unity_Add_float3(_Add_4F9D38F7_Out_2, (_Multiply_42A7AC12_Out_2.xyz), _Add_B33784D3_Out_2);
+                Unity_Add_float3(_Multiply_F910F817_Out_2, _Multiply_4ADD9031_Out_2, _Add_B33784D3_Out_2);
+                float4 _Property_81C60D7E_Out_0 = Color_1A413B9C;
+                float3 _Add_9C0E1EB1_Out_2;
+                Unity_Add_float3(_Add_B33784D3_Out_2, (_Property_81C60D7E_Out_0.xyz), _Add_9C0E1EB1_Out_2);
                 float _SceneDepth_4FAE51A0_Out_1;
                 Unity_SceneDepth_Eye_float(float4(IN.ScreenPosition.xy / IN.ScreenPosition.w, 0, 0), _SceneDepth_4FAE51A0_Out_1);
                 float4 _ScreenPosition_8E746D1E_Out_0 = IN.ScreenPosition;
@@ -2299,11 +2321,11 @@ Shader "PBR Master"
                 float _Subtract_68104637_Out_2;
                 Unity_Subtract_float(_SceneDepth_4FAE51A0_Out_1, _Subtract_42FE7ACD_Out_2, _Subtract_68104637_Out_2);
                 float _Divide_564AD5D6_Out_2;
-                Unity_Divide_float(_Subtract_68104637_Out_2, 100, _Divide_564AD5D6_Out_2);
+                Unity_Divide_float(_Subtract_68104637_Out_2, 50, _Divide_564AD5D6_Out_2);
                 float _Saturate_2F42B045_Out_1;
                 Unity_Saturate_float(_Divide_564AD5D6_Out_2, _Saturate_2F42B045_Out_1);
                 surface.Albedo = IsGammaSpace() ? float3(0, 0, 0) : SRGBToLinear(float3(0, 0, 0));
-                surface.Emission = _Add_B33784D3_Out_2;
+                surface.Emission = _Add_9C0E1EB1_Out_2;
                 surface.Alpha = _Saturate_2F42B045_Out_1;
                 surface.AlphaClipThreshold = 0;
                 return surface;
@@ -2320,6 +2342,7 @@ Shader "PBR Master"
                 float4 tangentOS : TANGENT;
                 float4 uv1 : TEXCOORD1;
                 float4 uv2 : TEXCOORD2;
+                float4 color : COLOR;
                 #if UNITY_ANY_INSTANCING_ENABLED
                 uint instanceID : INSTANCEID_SEMANTIC;
                 #endif
@@ -2331,6 +2354,7 @@ Shader "PBR Master"
                 float4 positionCS : SV_POSITION;
                 float3 positionWS;
                 float3 normalWS;
+                float4 color;
                 float3 viewDirectionWS;
                 #if UNITY_ANY_INSTANCING_ENABLED
                 uint instanceID : CUSTOM_INSTANCE_ID;
@@ -2355,7 +2379,8 @@ Shader "PBR Master"
                 #endif
                 float3 interp00 : TEXCOORD0;
                 float3 interp01 : TEXCOORD1;
-                float3 interp02 : TEXCOORD2;
+                float4 interp02 : TEXCOORD2;
+                float3 interp03 : TEXCOORD3;
                 #if (defined(UNITY_STEREO_INSTANCING_ENABLED))
                 uint stereoTargetEyeIndexAsRTArrayIdx : SV_RenderTargetArrayIndex;
                 #endif
@@ -2374,7 +2399,8 @@ Shader "PBR Master"
                 output.positionCS = input.positionCS;
                 output.interp00.xyz = input.positionWS;
                 output.interp01.xyz = input.normalWS;
-                output.interp02.xyz = input.viewDirectionWS;
+                output.interp02.xyzw = input.color;
+                output.interp03.xyz = input.viewDirectionWS;
                 #if UNITY_ANY_INSTANCING_ENABLED
                 output.instanceID = input.instanceID;
                 #endif
@@ -2397,7 +2423,8 @@ Shader "PBR Master"
                 output.positionCS = input.positionCS;
                 output.positionWS = input.interp00.xyz;
                 output.normalWS = input.interp01.xyz;
-                output.viewDirectionWS = input.interp02.xyz;
+                output.color = input.interp02.xyzw;
+                output.viewDirectionWS = input.interp03.xyz;
                 #if UNITY_ANY_INSTANCING_ENABLED
                 output.instanceID = input.instanceID;
                 #endif
@@ -2447,6 +2474,7 @@ Shader "PBR Master"
                 output.WorldSpaceViewDirection =     input.viewDirectionWS; //TODO: by default normalized in HD, but not in universal
                 output.WorldSpacePosition =          input.positionWS;
                 output.ScreenPosition =              ComputeScreenPos(TransformWorldToHClip(input.positionWS), _ProjectionParams.x);
+                output.VertexColor =                 input.color;
                 output.TimeParameters =              _TimeParameters.xyz; // This is mainly for LW as HD overwrite this value
             #if defined(SHADER_STAGE_FRAGMENT) && defined(VARYINGS_NEED_CULLFACE)
             #define BUILD_SURFACE_DESCRIPTION_INPUTS_OUTPUT_FACESIGN output.FaceSign =                    IS_FRONT_VFACE(input.cullFace, true, false);
@@ -2768,7 +2796,7 @@ Shader "PBR Master"
                 float _Subtract_68104637_Out_2;
                 Unity_Subtract_float(_SceneDepth_4FAE51A0_Out_1, _Subtract_42FE7ACD_Out_2, _Subtract_68104637_Out_2);
                 float _Divide_564AD5D6_Out_2;
-                Unity_Divide_float(_Subtract_68104637_Out_2, 100, _Divide_564AD5D6_Out_2);
+                Unity_Divide_float(_Subtract_68104637_Out_2, 50, _Divide_564AD5D6_Out_2);
                 float _Saturate_2F42B045_Out_1;
                 Unity_Saturate_float(_Divide_564AD5D6_Out_2, _Saturate_2F42B045_Out_1);
                 surface.Albedo = IsGammaSpace() ? float3(0, 0, 0) : SRGBToLinear(float3(0, 0, 0));

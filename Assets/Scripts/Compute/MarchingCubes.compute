@@ -11,11 +11,15 @@ struct Triangle
     float3 normal2;
     float3 normal1;
     float3 normal0;
+    float3 color2;
+    float3 color1;
+    float3 color0;
 };
 struct CubeVert 
 {
     float4 vert;
     float3 normal;
+    float3 colors;
 };
 
 AppendStructuredBuffer<Triangle> triangles;
@@ -67,8 +71,6 @@ float3 interpolateNorms(CubeVert cubeA, CubeVert cubeB)
 
     return slerp(cubeA.normal, cubeB.normal, t);
 }
-
-
 
 [numthreads(numThreads, numThreads, numThreads)]
 void March(int3 id : SV_DispatchThreadID)

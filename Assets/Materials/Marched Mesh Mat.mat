@@ -21,14 +21,13 @@ Material:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_Name: Marched Mesh Mat
-  m_Shader: {fileID: 4800000, guid: 8d2bb70cbf9db8d4da26e15b26e74248, type: 3}
+  m_Shader: {fileID: 4800000, guid: 1852a962f85ba2f439ee6e62d6d07819, type: 3}
   m_ShaderKeywords: 
-  m_LightmapFlags: 6
+  m_LightmapFlags: 2
   m_EnableInstancingVariants: 0
   m_DoubleSidedGI: 0
-  m_CustomRenderQueue: 2000
-  stringTagMap:
-    RenderType: Opaque
+  m_CustomRenderQueue: -1
+  stringTagMap: {}
   disabledShaderPasses: []
   m_SavedProperties:
     serializedVersion: 3
@@ -124,7 +123,7 @@ Material:
     - Vector1_4439DAA0: 0.0001
     - Vector1_48E1DFAE: 0.5
     - Vector1_5C468755: 1.5
-    - Vector1_68A1BB04: 1
+    - Vector1_68A1BB04: 0.5
     - Vector1_6B08AD18: 1
     - Vector1_736F5C30: 1.2
     - Vector1_751F15B1: 5000
@@ -136,9 +135,9 @@ Material:
     - Vector1_9C9E2EF: 1.5
     - Vector1_A12C6487: 0.6
     - Vector1_AEC37E3C: 850
-    - Vector1_B33D0616: 2.5
+    - Vector1_B33D0616: 1
     - Vector1_B527BCC5: 0.5
-    - Vector1_CF216209: 0.7
+    - Vector1_CF216209: 0.5
     - Vector1_D4B45908: 24.31
     - Vector1_D7E2ED5C: 0.005
     - Vector1_ED975CC9: 1
@@ -180,10 +179,10 @@ Material:
     - _ZWrite: 1
     m_Colors:
     - Color_18D9386C: {r: 0, g: 0, b: 0, a: 0}
-    - Color_1A413B9C: {r: 0.17755431, g: 0.22124676, b: 0.2830189, a: 1}
+    - Color_1A413B9C: {r: 0.54561234, g: 0.56398326, b: 0.5754717, a: 1}
     - Color_8E13568A: {r: 0.2, g: 0.2, b: 0.2, a: 0}
     - Color_AD1C6FDD: {r: 1, g: 1, b: 1, a: 0}
-    - Color_B178CEE1: {r: 0.735849, g: 0.735849, b: 0.735849, a: 0}
+    - Color_B178CEE1: {r: 0.5377358, g: 0.5377358, b: 0.5377358, a: 0}
     - Color_B5CEF074: {r: 0.5754717, g: 0.5754717, b: 0.5754717, a: 0}
     - Color_DCF889C6: {r: 1, g: 1, b: 1, a: 0}
     - Vector3_35C4F6EE: {r: 1, g: 0, b: 0, a: 0}

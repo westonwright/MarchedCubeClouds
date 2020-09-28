@@ -50,9 +50,7 @@ public class MeshGenerator : MonoBehaviour
         triangleBuffer.SetCounterValue(0);
         pointsBuffer.SetData(chunk.points);
         shader.SetBuffer(0, "points", pointsBuffer);
-        shader.SetBuffer(0, "triangles", triangleBuffer);
         shader.SetInt("pointsPerAxis", chunk.pointsPerAxis);
-        shader.SetFloat("surfaceLevel", surfaceLevel);
 
         shader.Dispatch(0, numThreadsPerAxis, numThreadsPerAxis, numThreadsPerAxis);
 
